@@ -1,15 +1,18 @@
 # GLB Quick Look
 
-Extension Quick Look pour prévisualiser les fichiers `.glb` / `.gltf` dans le Finder (barre d'espace).
-Rendu 3D via three.js r147 (inclus dans `Extension/js`, aucun accès réseau).
+Quick Look extension to preview `.glb` / `.gltf` files in the Finder (Space bar) and Spotlight.
+3D rendering via three.js r147 (bundled in `Extension/js`, no network access).
 
-- `Extension/PreviewViewController.swift` : charge le fichier et l'injecte dans une WKWebView
-- `Extension/viewer.html` : visionneuse three.js (rotation auto, orbite, zoom, panneau « Rig » : sliders de rotation X/Y/Z par os + sliders de blendshapes / morph targets, ex. ARKit + lecture des clips d’animation baked)
-- `App/` : app hôte minimale (nécessaire pour embarquer l'extension)
+- `Extension/PreviewViewController.swift`: loads the file and injects it into a WKWebView
+- `Extension/viewer.html`: three.js viewer (auto-rotate, orbit, zoom) with a "Rig" panel:
+  - **Bones**: per-bone X/Y/Z rotation sliders, skeleton overlay
+  - **Blendshapes**: morph target sliders (e.g. ARKit)
+  - **Clips**: baked animation playback (play/pause, scrub, speed)
+- `App/`: minimal host app (required to embed the extension)
 
-## Recompiler / réinstaller
+## Rebuild / reinstall
 
     ./build.sh
 
-Signature ad-hoc : fonctionne sur ce Mac uniquement. Non supporté : modèles compressés Draco/meshopt.
-`project.yml` (xcodegen) permet aussi de générer un projet Xcode.
+Ad-hoc signing: works on this Mac only. Not supported: Draco/meshopt-compressed models.
+`project.yml` (xcodegen) can also generate an Xcode project.

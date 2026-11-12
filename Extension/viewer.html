@@ -29,30 +29,30 @@
   #rig .mrow div{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   #rig .mrow span{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
 </style></head>
-<body><div id="msg">Chargement…</div>
+<body><div id="msg">Loading…</div>
 <button id="rigBtn">Rig</button>
 <div id="rig">
-  <div class="tabs"><button id="tabBones">Os<span id="boneCount"></span></button><button id="tabMorphs">Blendshapes<span id="morphCount"></span></button><button id="tabClips">Clips<span id="clipCount"></span></button></div>
+  <div class="tabs"><button id="tabBones">Bones<span id="boneCount"></span></button><button id="tabMorphs">Blendshapes<span id="morphCount"></span></button><button id="tabClips">Clips<span id="clipCount"></span></button></div>
   <div id="paneBones">
-  <input type="search" id="boneFilter" placeholder="Filtrer…">
+  <input type="search" id="boneFilter" placeholder="Filter…">
   <select id="boneSel" size="8"></select>
   <div class="row"><b>X</b><input type="range" id="rx" min="-180" max="180" step="1" value="0"><span id="vx">0°</span></div>
   <div class="row"><b>Y</b><input type="range" id="ry" min="-180" max="180" step="1" value="0"><span id="vy">0°</span></div>
   <div class="row"><b>Z</b><input type="range" id="rz" min="-180" max="180" step="1" value="0"><span id="vz">0°</span></div>
   <div class="bar">
-    <button id="resetBone">Reset os</button><button id="resetAll">Reset tout</button>
-    <label><input type="checkbox" id="showSkel" checked>Squelette</label>
+    <button id="resetBone">Reset bone</button><button id="resetAll">Reset all</button>
+    <label><input type="checkbox" id="showSkel" checked>Skeleton</label>
   </div>
   </div>
   <div id="paneMorphs">
-    <input type="search" id="morphFilter" placeholder="Filtrer…">
+    <input type="search" id="morphFilter" placeholder="Filter…">
     <div id="morphList"></div>
-    <div class="bar"><button id="resetMorphs">Reset tout</button></div>
+    <div class="bar"><button id="resetMorphs">Reset all</button></div>
   </div>
   <div id="paneClips">
     <select id="clipSel"></select>
     <div class="clipRow"><button id="clipPlay">❚❚</button><input type="range" id="clipTime" min="0" max="1" step="0.001" value="0"><span id="clipT">0.00s</span></div>
-    <div class="bar"><label>Vitesse <select id="clipSpeed"><option>0.25</option><option>0.5</option><option selected>1</option><option>2</option></select></label><button id="clipStop">Pose de repos</button></div>
+    <div class="bar"><label>Speed <select id="clipSpeed"><option>0.25</option><option>0.5</option><option selected>1</option><option>2</option></select></label><button id="clipStop">Rest pose</button></div>
   </div>
 </div>
 <!--SCRIPTS-->
@@ -92,16 +92,16 @@
     controls.target.set(0, 0, 0);
     controls.update();
     setupRig(root, size, gltf.animations || []);
-  }, (err) => { msg.textContent = 'Impossible de lire ce fichier : ' + (err && err.message || err); });
+  }, (err) => { msg.textContent = 'Unable to read this file: ' + (err && err.message || err); });
 
 
-  // ---- Rig : sliders de rotation par os + blendshapes (morph targets) ----
+  // ---- Rig: per-bone rotation sliders + blendshapes (morph targets) + clips ----
   let rigTick = null;
   const clock = new THREE.Clock();
   function setupRig(root, size, clips){
     const $ = id => document.getElementById(id);
     const bones = [];
-    const morphs = new Map(); // nom -> [{mesh, i}]
+    const morphs = new Map(); // name -> [{mesh, i}]
     root.traverse(o => {
       if (o.isBone) bones.push(o);
       if (o.morphTargetDictionary && o.morphTargetInfluences)
@@ -116,7 +116,7 @@
     $('rigBtn').style.display = 'block';
     panel.addEventListener('pointerdown', () => { controls.autoRotate = false; });
 
-    // Onglets
+    // Tabs
     const tabs = {bones: [$('tabBones'), $('paneBones')], morphs: [$('tabMorphs'), $('paneMorphs')], clips: [$('tabClips'), $('paneClips')]};
     const show = k => { for (const [n, [t, pane]] of Object.entries(tabs)) { t.classList.toggle('on', n === k); pane.style.display = n === k ? '' : 'none'; } syncVis(); };
     tabs.bones[0].style.display = bones.length ? '' : 'none';
@@ -136,7 +136,7 @@
     }
     $('rigBtn').onclick = () => { panel.classList.toggle('open'); controls.autoRotate = false; syncVis(); };
 
-    // Os
+    // Bones
     if (bones.length) {
       const sel = $('boneSel'), filter = $('boneFilter');
       const sliders = ['x','y','z'].map(a => ({a, r: $('r'+a), v: $('v'+a)}));
@@ -204,7 +204,7 @@
       $('resetMorphs').onclick = () => rows.forEach(x => x.set(0));
     }
 
-    // Clips (animations baked)
+    // Clips (baked animations)
     if (clips.length) {
       $('clipCount').textContent = clips.length;
       const rest = [];
@@ -234,7 +234,7 @@
       tl.addEventListener('input', () => { if (!action) choose(+sel.value); setPlaying(false); action.time = +tl.value; });
       ticks.unshift(dt => {
         if (!action) return;
-        // Les offsets des sliders d'os s'ajoutent par-dessus la pose animée
+        // Bone slider offsets are applied on top of the animated pose
         bones.forEach(b => { if (hasOff(b)) b.quaternion.copy(b.userData.rest); });
         mixer.update(playing ? dt * +speed.value : 0);
         bones.forEach(b => { if (hasOff(b)) b.quaternion.multiply(offQ(b)); });
