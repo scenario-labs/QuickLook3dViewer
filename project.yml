@@ -1,0 +1,35 @@
+name: GLBQuickLook
+options:
+  bundleIdPrefix: local.olivier
+  deploymentTarget:
+    macOS: "13.0"
+settings:
+  base:
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGN_STYLE: Manual
+    DEVELOPMENT_TEAM: ""
+    SWIFT_VERSION: "5.0"
+    ENABLE_HARDENED_RUNTIME: NO
+targets:
+  GLBQuickLook:
+    type: application
+    platform: macOS
+    sources: [App]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: local.olivier.GLBQuickLook
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: GLB Quick Look
+        CODE_SIGN_ENTITLEMENTS: App/App.entitlements
+    dependencies:
+      - target: GLBPreview
+        embed: true
+  GLBPreview:
+    type: app-extension
+    platform: macOS
+    sources: [Extension]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: local.olivier.GLBQuickLook.GLBPreview
+        INFOPLIST_FILE: Extension/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Extension/Extension.entitlements

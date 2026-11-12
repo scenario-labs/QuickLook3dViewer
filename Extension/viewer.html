@@ -1,0 +1,54 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:radial-gradient(circle at 50% 40%,#ffffff,#d9dce1);}
+  @media (prefers-color-scheme: dark){html,body{background:radial-gradient(circle at 50% 40%,#3a3d42,#1c1d20);}}
+  canvas{display:block}
+  #msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:14px -apple-system,sans-serif;color:#888}
+</style></head>
+<body><div id="msg">Chargement…</div>
+<!--SCRIPTS-->
+<script>
+(function(){
+  const msg = document.getElementById('msg');
+  const renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  document.body.appendChild(renderer.domElement);
+  const scene = new THREE.Scene();
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new THREE.RoomEnvironment(), 0.04).texture;
+  const camera = new THREE.PerspectiveCamera(40, innerWidth/innerHeight, 0.01, 1000);
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 1.5;
+  controls.addEventListener('start', () => { controls.autoRotate = false; });
+
+  const b64 = "__MODEL_B64__";
+  const bin = atob(b64); const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+
+  new THREE.GLTFLoader().parse(bytes.buffer, '', (gltf) => {
+    msg.remove();
+    const root = gltf.scene;
+    scene.add(root);
+    const box = new THREE.Box3().setFromObject(root);
+    const size = box.getSize(new THREE.Vector3()).length() || 1;
+    const center = box.getCenter(new THREE.Vector3());
+    root.position.sub(center);
+    camera.near = size / 100; camera.far = size * 100; camera.updateProjectionMatrix();
+    camera.position.set(0, size * 0.25, size * 1.1);
+    controls.target.set(0, 0, 0);
+    controls.update();
+  }, (err) => { msg.textContent = 'Impossible de lire ce fichier : ' + (err && err.message || err); });
+
+  addEventListener('resize', () => {
+    camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+  (function loop(){ requestAnimationFrame(loop); controls.update(); renderer.render(scene, camera); })();
+})();
+</script></body></html>
