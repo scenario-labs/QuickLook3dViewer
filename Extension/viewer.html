@@ -23,7 +23,9 @@
   #rig .tabs button.on{background:var(--accent);border-color:var(--accent);color:#fff}
   #rig .tabs button.on span{color:rgba(255,255,255,.75)}
   #rig .tabs span{color:var(--muted);margin-left:3px}
-  #rig .clipRow{display:grid;grid-template-columns:28px 1fr 46px;align-items:center;gap:6px;margin:8px 0}
+  #rig .clipName{margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #rig .clipName span{color:var(--muted);margin-left:4px}
+  #rig .clipRow{display:grid;grid-template-columns:28px 1fr 46px;align-items:center;gap:6px;margin:2px 0 6px}
   #rig .clipRow span{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
   #rig .mrow{display:grid;grid-template-columns:1fr 80px 30px;align-items:center;gap:6px;margin:3px 0}
   #rig .mrow div{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -50,9 +52,8 @@
     <div class="bar"><button id="resetMorphs">Reset all</button></div>
   </div>
   <div id="paneClips">
-    <select id="clipSel"></select>
-    <div class="clipRow"><button id="clipPlay">❚❚</button><input type="range" id="clipTime" min="0" max="1" step="0.001" value="0"><span id="clipT">0.00s</span></div>
-    <div class="bar"><label>Speed <select id="clipSpeed"><option>0.25</option><option>0.5</option><option selected>1</option><option>2</option></select></label><button id="clipStop">Rest pose</button></div>
+    <div id="clipList"></div>
+    <div class="bar"><button id="clipAll">Play all</button><label>Speed <select id="clipSpeed"><option>0.25</option><option>0.5</option><option selected>1</option><option>2</option></select></label><button id="clipStop">Rest pose</button></div>
   </div>
 </div>
 <!--SCRIPTS-->
@@ -216,33 +217,52 @@
         morphRest.forEach(([t, v]) => { t.mesh.morphTargetInfluences[t.i] = morphSliders.get(t) ?? v; });
       };
       const mixer = new THREE.AnimationMixer(root);
-      const sel = $('clipSel'), tl = $('clipTime'), tv = $('clipT'), playBtn = $('clipPlay'), speed = $('clipSpeed');
-      clips.forEach((c, i) => { const o = document.createElement('option'); o.value = i;
-        o.textContent = (c.name || ('clip_' + i)) + ' · ' + c.duration.toFixed(2) + 's'; sel.appendChild(o); });
-      let action = null, playing = true;
-      const setPlaying = v => { playing = v; playBtn.textContent = v ? '❚❚' : '▶'; };
-      function choose(i){
+      const list = $('clipList'), speed = $('clipSpeed'), allBtn = $('clipAll');
+      // One row per clip, each with its own play/pause + timeline: clips can play in parallel
+      let items = [];
+      items = clips.map((clip, i) => {
+        const name = document.createElement('div'); name.className = 'clipName';
+        name.textContent = clip.name || ('clip_' + i); name.title = name.textContent;
+        const dur = document.createElement('span'); dur.textContent = clip.duration.toFixed(2) + 's'; name.appendChild(dur);
+        const row = document.createElement('div'); row.className = 'clipRow';
+        const btn = document.createElement('button');
+        const tl = document.createElement('input'); tl.type = 'range'; tl.min = 0; tl.max = clip.duration || 1; tl.step = 0.001; tl.value = 0;
+        const tv = document.createElement('span'); tv.textContent = '0.00s';
+        row.append(btn, tl, tv); list.append(name, row);
+        const action = mixer.clipAction(clip);
+        const it = {action, btn, tl, tv, playing: false};
+        it.setPlaying = v => {
+          it.playing = v; btn.textContent = v ? '❚❚' : '▶';
+          if (v && !action.isScheduled()) action.reset().play();
+          action.paused = !v;
+          syncAll();
+        };
+        btn.onclick = () => it.setPlaying(!it.playing);
+        tl.addEventListener('input', () => {
+          if (!action.isScheduled()) action.reset().play();
+          it.setPlaying(false); action.time = +tl.value;
+        });
+        it.setPlaying(false);
+        return it;
+      });
+      function syncAll(){ allBtn.textContent = items.some(it => it.playing) ? 'Pause all' : 'Play all'; }
+      allBtn.onclick = () => { const any = items.some(it => it.playing); items.forEach(it => it.setPlaying(!any)); };
+      $('clipStop').onclick = () => {
+        items.forEach(it => it.setPlaying(false));
         mixer.stopAllAction(); restore();
-        if (i < 0) { action = null; setPlaying(false); tl.value = 0; tv.textContent = '—'; return; }
-        sel.value = i;
-        action = mixer.clipAction(clips[i]); action.reset().play();
-        tl.max = clips[i].duration || 1;
-      }
-      sel.onchange = () => { choose(+sel.value); setPlaying(true); };
-      playBtn.onclick = () => { if (!action) choose(+sel.value); setPlaying(!playing); };
-      $('clipStop').onclick = () => choose(-1);
-      tl.addEventListener('input', () => { if (!action) choose(+sel.value); setPlaying(false); action.time = +tl.value; });
+        items.forEach(it => { it.tl.value = 0; it.tv.textContent = '0.00s'; });
+      };
       ticks.unshift(dt => {
-        if (!action) return;
+        if (!items.some(it => it.action.isScheduled())) return;
         // Bone slider offsets are applied on top of the animated pose
         bones.forEach(b => { if (hasOff(b)) b.quaternion.copy(b.userData.rest); });
-        mixer.update(playing ? dt * +speed.value : 0);
+        mixer.update(dt * +speed.value);
         bones.forEach(b => { if (hasOff(b)) b.quaternion.multiply(offQ(b)); });
-        tl.value = action.time; tv.textContent = action.time.toFixed(2) + 's';
+        items.forEach(it => { if (it.action.isScheduled()) { it.tl.value = it.action.time; it.tv.textContent = it.action.time.toFixed(2) + 's'; } });
       });
-      choose(0);
+      items[0].setPlaying(true);
     }
-    show(bones.length ? 'bones' : morphs.size ? 'morphs' : 'clips');
+    show(clips.length ? 'clips' : bones.length ? 'bones' : 'morphs');
   }
 
   addEventListener('resize', () => {

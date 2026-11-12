@@ -1,0 +1,34 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build universal app
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          [[ "$TAG" == v* ]] && export VERSION="${TAG#v}"
+          ./build.sh --package
+          unzip -l dist/GLBQuickLook.zip | tail -1
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GLBQuickLook
+          path: dist/GLBQuickLook.zip
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/GLBQuickLook.zip \
+            --title "GLB Quick Look $GITHUB_REF_NAME" --generate-notes \
+          || gh release upload "$GITHUB_REF_NAME" dist/GLBQuickLook.zip --clobber
