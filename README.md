@@ -4,7 +4,7 @@ Extension Quick Look pour prévisualiser les fichiers `.glb` / `.gltf` dans le F
 Rendu 3D via three.js r147 (inclus dans `Extension/js`, aucun accès réseau).
 
 - `Extension/PreviewViewController.swift` : charge le fichier et l'injecte dans une WKWebView
-- `Extension/viewer.html` : visionneuse three.js (rotation auto, orbite, zoom)
+- `Extension/viewer.html` : visionneuse three.js (rotation auto, orbite, zoom, panneau « Rig » : sliders de rotation X/Y/Z par os pour les assets riggés)
 - `App/` : app hôte minimale (nécessaire pour embarquer l'extension)
 
 ## Recompiler / réinstaller

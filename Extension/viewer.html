@@ -5,8 +5,35 @@
   @media (prefers-color-scheme: dark){html,body{background:radial-gradient(circle at 50% 40%,#3a3d42,#1c1d20);}}
   canvas{display:block}
   #msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:14px -apple-system,sans-serif;color:#888}
+  :root{--panel:rgba(255,255,255,.82);--fg:#222;--muted:#777;--line:rgba(0,0,0,.12);--accent:#0a84ff}
+  @media (prefers-color-scheme: dark){:root{--panel:rgba(40,42,46,.85);--fg:#eee;--muted:#999;--line:rgba(255,255,255,.14)}}
+  #rigBtn{position:absolute;top:10px;right:10px;font:600 12px -apple-system,sans-serif;padding:5px 10px;border-radius:7px;border:1px solid var(--line);background:var(--panel);color:var(--fg);cursor:pointer;-webkit-backdrop-filter:blur(12px);display:none}
+  #rig{position:absolute;top:44px;right:10px;width:250px;max-height:calc(100% - 64px);overflow:auto;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--fg);font:12px -apple-system,sans-serif;-webkit-backdrop-filter:blur(12px);display:none}
+  #rig.open{display:block}
+  #rig select,#rig input[type=search]{width:100%;box-sizing:border-box;margin:4px 0;font:12px -apple-system,sans-serif}
+  #rig .row{display:grid;grid-template-columns:14px 1fr 44px;align-items:center;gap:6px;margin:6px 0}
+  #rig .row b{color:var(--muted);font-weight:600}
+  #rig .row span{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
+  #rig input[type=range]{width:100%;accent-color:var(--accent)}
+  #rig .bar{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center}
+  #rig button{font:12px -apple-system,sans-serif;padding:3px 8px;border-radius:6px;border:1px solid var(--line);background:transparent;color:var(--fg);cursor:pointer}
+  #rig label{display:flex;gap:4px;align-items:center;color:var(--muted)}
+  #rig .hdr{display:flex;justify-content:space-between;color:var(--muted);margin-bottom:2px}
 </style></head>
 <body><div id="msg">Chargement…</div>
+<button id="rigBtn">Rig</button>
+<div id="rig">
+  <div class="hdr"><span>Os</span><span id="boneCount"></span></div>
+  <input type="search" id="boneFilter" placeholder="Filtrer…">
+  <select id="boneSel" size="8"></select>
+  <div class="row"><b>X</b><input type="range" id="rx" min="-180" max="180" step="1" value="0"><span id="vx">0°</span></div>
+  <div class="row"><b>Y</b><input type="range" id="ry" min="-180" max="180" step="1" value="0"><span id="vy">0°</span></div>
+  <div class="row"><b>Z</b><input type="range" id="rz" min="-180" max="180" step="1" value="0"><span id="vz">0°</span></div>
+  <div class="bar">
+    <button id="resetBone">Reset os</button><button id="resetAll">Reset tout</button>
+    <label><input type="checkbox" id="showSkel" checked>Squelette</label>
+  </div>
+</div>
 <!--SCRIPTS-->
 <script>
 (function(){
@@ -43,12 +70,81 @@
     camera.position.set(0, size * 0.25, size * 1.1);
     controls.target.set(0, 0, 0);
     controls.update();
+    setupRig(root, size);
   }, (err) => { msg.textContent = 'Impossible de lire ce fichier : ' + (err && err.message || err); });
+
+
+  // ---- Rig : sliders de rotation par os ----
+  let rigTick = null;
+  function setupRig(root, size){
+    const bones = [];
+    root.traverse(o => { if (o.isBone) bones.push(o); });
+    if (!bones.length) return;
+    const $ = id => document.getElementById(id);
+    const panel = $('rig'), sel = $('boneSel'), filter = $('boneFilter');
+    const sliders = ['x','y','z'].map(a => ({a, r: $('r'+a), v: $('v'+a)}));
+    $('rigBtn').style.display = 'block';
+    $('boneCount').textContent = bones.length;
+
+    const depth = b => { let d = 0, p = b.parent; while (p) { if (p.isBone) d++; p = p.parent; } return d; };
+    bones.forEach((b, i) => {
+      b.userData.rest = b.quaternion.clone();
+      b.userData.off = {x:0, y:0, z:0};
+      b.userData.label = '\u00a0\u00a0'.repeat(depth(b)) + (b.name || ('bone_' + i));
+    });
+
+    const helper = new THREE.SkeletonHelper(root);
+    helper.material.depthTest = false; helper.material.transparent = true; helper.renderOrder = 998;
+    helper.visible = false; scene.add(helper);
+    const marker = new THREE.Mesh(new THREE.SphereGeometry(size * 0.012, 12, 8),
+      new THREE.MeshBasicMaterial({color: 0x0a84ff, depthTest: false, transparent: true}));
+    marker.renderOrder = 999; marker.visible = false; scene.add(marker);
+
+    let current = null;
+    function fillList(){
+      const q = filter.value.trim().toLowerCase();
+      sel.innerHTML = '';
+      bones.forEach((b, i) => {
+        if (q && !(b.name || '').toLowerCase().includes(q)) return;
+        const o = document.createElement('option');
+        o.value = i; o.textContent = b.userData.label; sel.appendChild(o);
+      });
+      if (current) sel.value = bones.indexOf(current);
+    }
+    function select(b){
+      current = b;
+      sliders.forEach(s => { s.r.value = b.userData.off[s.a]; s.v.textContent = b.userData.off[s.a] + '°'; });
+    }
+    function apply(b){
+      const o = b.userData.off, d = THREE.MathUtils.DEG2RAD;
+      const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(o.x*d, o.y*d, o.z*d, 'XYZ'));
+      b.quaternion.copy(b.userData.rest).multiply(q);
+    }
+    filter.addEventListener('input', fillList);
+    sel.addEventListener('change', () => select(bones[+sel.value]));
+    sliders.forEach(s => s.r.addEventListener('input', () => {
+      if (!current) return;
+      current.userData.off[s.a] = +s.r.value; s.v.textContent = s.r.value + '°'; apply(current);
+    }));
+    $('resetBone').onclick = () => { if (!current) return; current.userData.off = {x:0,y:0,z:0}; apply(current); select(current); };
+    $('resetAll').onclick = () => { bones.forEach(b => { b.userData.off = {x:0,y:0,z:0}; apply(b); }); if (current) select(current); };
+    const skel = $('showSkel');
+    const syncVis = () => { const open = panel.classList.contains('open'); helper.visible = open && skel.checked; marker.visible = open && !!current; };
+    skel.onchange = syncVis;
+    $('rigBtn').onclick = () => { panel.classList.toggle('open'); controls.autoRotate = false; syncVis(); };
+    panel.addEventListener('pointerdown', () => { controls.autoRotate = false; });
+
+    fillList(); sel.selectedIndex = 0; select(bones[+sel.value]);
+    rigTick = () => {
+      marker.visible = panel.classList.contains('open') && !!current;
+      if (marker.visible) current.getWorldPosition(marker.position);
+    };
+  }
 
   addEventListener('resize', () => {
     camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight);
   });
-  (function loop(){ requestAnimationFrame(loop); controls.update(); renderer.render(scene, camera); })();
+  (function loop(){ requestAnimationFrame(loop); controls.update(); if (rigTick) rigTick(); renderer.render(scene, camera); })();
 })();
 </script></body></html>
