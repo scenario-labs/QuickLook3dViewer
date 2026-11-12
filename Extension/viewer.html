@@ -23,6 +23,8 @@
   #rig .tabs button.on{background:var(--accent);border-color:var(--accent);color:#fff}
   #rig .tabs button.on span{color:rgba(255,255,255,.75)}
   #rig .tabs span{color:var(--muted);margin-left:3px}
+  #rig .clipRow{display:grid;grid-template-columns:28px 1fr 46px;align-items:center;gap:6px;margin:8px 0}
+  #rig .clipRow span{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
   #rig .mrow{display:grid;grid-template-columns:1fr 80px 30px;align-items:center;gap:6px;margin:3px 0}
   #rig .mrow div{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   #rig .mrow span{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
@@ -30,7 +32,7 @@
 <body><div id="msg">Chargement…</div>
 <button id="rigBtn">Rig</button>
 <div id="rig">
-  <div class="tabs"><button id="tabBones">Os<span id="boneCount"></span></button><button id="tabMorphs">Blendshapes<span id="morphCount"></span></button></div>
+  <div class="tabs"><button id="tabBones">Os<span id="boneCount"></span></button><button id="tabMorphs">Blendshapes<span id="morphCount"></span></button><button id="tabClips">Clips<span id="clipCount"></span></button></div>
   <div id="paneBones">
   <input type="search" id="boneFilter" placeholder="Filtrer…">
   <select id="boneSel" size="8"></select>
@@ -46,6 +48,11 @@
     <input type="search" id="morphFilter" placeholder="Filtrer…">
     <div id="morphList"></div>
     <div class="bar"><button id="resetMorphs">Reset tout</button></div>
+  </div>
+  <div id="paneClips">
+    <select id="clipSel"></select>
+    <div class="clipRow"><button id="clipPlay">❚❚</button><input type="range" id="clipTime" min="0" max="1" step="0.001" value="0"><span id="clipT">0.00s</span></div>
+    <div class="bar"><label>Vitesse <select id="clipSpeed"><option>0.25</option><option>0.5</option><option selected>1</option><option>2</option></select></label><button id="clipStop">Pose de repos</button></div>
   </div>
 </div>
 <!--SCRIPTS-->
@@ -84,13 +91,14 @@
     camera.position.set(0, size * 0.25, size * 1.1);
     controls.target.set(0, 0, 0);
     controls.update();
-    setupRig(root, size);
+    setupRig(root, size, gltf.animations || []);
   }, (err) => { msg.textContent = 'Impossible de lire ce fichier : ' + (err && err.message || err); });
 
 
   // ---- Rig : sliders de rotation par os + blendshapes (morph targets) ----
   let rigTick = null;
-  function setupRig(root, size){
+  const clock = new THREE.Clock();
+  function setupRig(root, size, clips){
     const $ = id => document.getElementById(id);
     const bones = [];
     const morphs = new Map(); // nom -> [{mesh, i}]
@@ -102,20 +110,25 @@
           morphs.get(name).push({mesh: o, i});
         }
     });
-    if (!bones.length && !morphs.size) return;
+    if (!bones.length && !morphs.size && !clips.length) return;
+    const ticks = []; rigTick = dt => ticks.forEach(f => f(dt));
     const panel = $('rig');
     $('rigBtn').style.display = 'block';
     panel.addEventListener('pointerdown', () => { controls.autoRotate = false; });
 
     // Onglets
-    const tabs = {bones: [$('tabBones'), $('paneBones')], morphs: [$('tabMorphs'), $('paneMorphs')]};
+    const tabs = {bones: [$('tabBones'), $('paneBones')], morphs: [$('tabMorphs'), $('paneMorphs')], clips: [$('tabClips'), $('paneClips')]};
     const show = k => { for (const [n, [t, pane]] of Object.entries(tabs)) { t.classList.toggle('on', n === k); pane.style.display = n === k ? '' : 'none'; } syncVis(); };
     tabs.bones[0].style.display = bones.length ? '' : 'none';
     tabs.morphs[0].style.display = morphs.size ? '' : 'none';
-    if (!bones.length || !morphs.size) panel.querySelector('.tabs').style.display = 'none';
-    tabs.bones[0].onclick = () => show('bones');
-    tabs.morphs[0].onclick = () => show('morphs');
+    tabs.clips[0].style.display = clips.length ? '' : 'none';
+    if ([bones.length, morphs.size, clips.length].filter(Boolean).length < 2) panel.querySelector('.tabs').style.display = 'none';
+    for (const k in tabs) tabs[k][0].onclick = () => show(k);
+    const offQ = b => { const o = b.userData.off, d = THREE.MathUtils.DEG2RAD;
+      return new THREE.Quaternion().setFromEuler(new THREE.Euler(o.x*d, o.y*d, o.z*d, 'XYZ')); };
+    const hasOff = b => b.userData.off && (b.userData.off.x || b.userData.off.y || b.userData.off.z);
     let helper = null, marker = null, current = null;
+    const morphSliders = new Map();
     const bonesOn = () => panel.classList.contains('open') && tabs.bones[1].style.display !== 'none';
     function syncVis(){
       if (helper) helper.visible = bonesOn() && $('showSkel').checked;
@@ -155,11 +168,7 @@
         current = b;
         sliders.forEach(s => { s.r.value = b.userData.off[s.a]; s.v.textContent = b.userData.off[s.a] + '°'; });
       }
-      function apply(b){
-        const o = b.userData.off, d = THREE.MathUtils.DEG2RAD;
-        const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(o.x*d, o.y*d, o.z*d, 'XYZ'));
-        b.quaternion.copy(b.userData.rest).multiply(q);
-      }
+      const apply = b => { b.quaternion.copy(b.userData.rest).multiply(offQ(b)); };
       filter.addEventListener('input', fillList);
       sel.addEventListener('change', () => select(bones[+sel.value]));
       sliders.forEach(s => s.r.addEventListener('input', () => {
@@ -170,7 +179,7 @@
       $('resetAll').onclick = () => { bones.forEach(b => { b.userData.off = {x:0,y:0,z:0}; apply(b); }); if (current) select(current); };
       $('showSkel').onchange = syncVis;
       fillList(); sel.selectedIndex = 0; select(bones[+sel.value]);
-      rigTick = () => { if (marker.visible) current.getWorldPosition(marker.position); };
+      ticks.push(() => { if (marker.visible) current.getWorldPosition(marker.position); });
     }
 
     // Blendshapes
@@ -182,7 +191,7 @@
         const label = document.createElement('div'); label.textContent = name; label.title = name;
         const r = document.createElement('input'); r.type = 'range'; r.min = 0; r.max = 1; r.step = 0.01;
         const v = document.createElement('span');
-        const set = x => { r.value = x; v.textContent = (+x).toFixed(2); targets.forEach(t => { t.mesh.morphTargetInfluences[t.i] = +x; }); };
+        const set = x => { r.value = x; v.textContent = (+x).toFixed(2); targets.forEach(t => { t.mesh.morphTargetInfluences[t.i] = +x; morphSliders.set(t, +x); }); };
         set(targets[0].mesh.morphTargetInfluences[targets[0].i] || 0);
         r.addEventListener('input', () => set(r.value));
         row.append(label, r, v); list.appendChild(row);
@@ -194,13 +203,52 @@
       });
       $('resetMorphs').onclick = () => rows.forEach(x => x.set(0));
     }
-    show(bones.length ? 'bones' : 'morphs');
+
+    // Clips (animations baked)
+    if (clips.length) {
+      $('clipCount').textContent = clips.length;
+      const rest = [];
+      root.traverse(o => rest.push([o, o.position.clone(), o.quaternion.clone(), o.scale.clone()]));
+      const morphRest = [];
+      for (const ts of morphs.values()) ts.forEach(t => morphRest.push([t, t.mesh.morphTargetInfluences[t.i]]));
+      const restore = () => {
+        rest.forEach(([o, p, q, s]) => { o.position.copy(p); o.quaternion.copy(q); o.scale.copy(s); });
+        morphRest.forEach(([t, v]) => { t.mesh.morphTargetInfluences[t.i] = morphSliders.get(t) ?? v; });
+      };
+      const mixer = new THREE.AnimationMixer(root);
+      const sel = $('clipSel'), tl = $('clipTime'), tv = $('clipT'), playBtn = $('clipPlay'), speed = $('clipSpeed');
+      clips.forEach((c, i) => { const o = document.createElement('option'); o.value = i;
+        o.textContent = (c.name || ('clip_' + i)) + ' · ' + c.duration.toFixed(2) + 's'; sel.appendChild(o); });
+      let action = null, playing = true;
+      const setPlaying = v => { playing = v; playBtn.textContent = v ? '❚❚' : '▶'; };
+      function choose(i){
+        mixer.stopAllAction(); restore();
+        if (i < 0) { action = null; setPlaying(false); tl.value = 0; tv.textContent = '—'; return; }
+        sel.value = i;
+        action = mixer.clipAction(clips[i]); action.reset().play();
+        tl.max = clips[i].duration || 1;
+      }
+      sel.onchange = () => { choose(+sel.value); setPlaying(true); };
+      playBtn.onclick = () => { if (!action) choose(+sel.value); setPlaying(!playing); };
+      $('clipStop').onclick = () => choose(-1);
+      tl.addEventListener('input', () => { if (!action) choose(+sel.value); setPlaying(false); action.time = +tl.value; });
+      ticks.unshift(dt => {
+        if (!action) return;
+        // Les offsets des sliders d'os s'ajoutent par-dessus la pose animée
+        bones.forEach(b => { if (hasOff(b)) b.quaternion.copy(b.userData.rest); });
+        mixer.update(playing ? dt * +speed.value : 0);
+        bones.forEach(b => { if (hasOff(b)) b.quaternion.multiply(offQ(b)); });
+        tl.value = action.time; tv.textContent = action.time.toFixed(2) + 's';
+      });
+      choose(0);
+    }
+    show(bones.length ? 'bones' : morphs.size ? 'morphs' : 'clips');
   }
 
   addEventListener('resize', () => {
     camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight);
   });
-  (function loop(){ requestAnimationFrame(loop); controls.update(); if (rigTick) rigTick(); renderer.render(scene, camera); })();
+  (function loop(){ requestAnimationFrame(loop); controls.update(); const dt = clock.getDelta(); if (rigTick) rigTick(dt); renderer.render(scene, camera); })();
 })();
 </script></body></html>
