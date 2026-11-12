@@ -8,7 +8,7 @@
   :root{--panel:rgba(255,255,255,.82);--fg:#222;--muted:#777;--line:rgba(0,0,0,.12);--accent:#0a84ff}
   @media (prefers-color-scheme: dark){:root{--panel:rgba(40,42,46,.85);--fg:#eee;--muted:#999;--line:rgba(255,255,255,.14)}}
   #rigBtn{position:absolute;top:10px;right:10px;font:600 12px -apple-system,sans-serif;padding:5px 10px;border-radius:7px;border:1px solid var(--line);background:var(--panel);color:var(--fg);cursor:pointer;-webkit-backdrop-filter:blur(12px);display:none}
-  #rig{position:absolute;top:44px;right:10px;width:250px;max-height:calc(100% - 64px);overflow:auto;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--fg);font:12px -apple-system,sans-serif;-webkit-backdrop-filter:blur(12px);display:none}
+  #rig{position:absolute;top:44px;right:10px;width:280px;max-height:calc(100% - 64px);overflow:auto;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--fg);font:12px -apple-system,sans-serif;-webkit-backdrop-filter:blur(12px);display:none}
   #rig.open{display:block}
   #rig select,#rig input[type=search]{width:100%;box-sizing:border-box;margin:4px 0;font:12px -apple-system,sans-serif}
   #rig .row{display:grid;grid-template-columns:14px 1fr 44px;align-items:center;gap:6px;margin:6px 0}
@@ -18,12 +18,20 @@
   #rig .bar{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center}
   #rig button{font:12px -apple-system,sans-serif;padding:3px 8px;border-radius:6px;border:1px solid var(--line);background:transparent;color:var(--fg);cursor:pointer}
   #rig label{display:flex;gap:4px;align-items:center;color:var(--muted)}
-  #rig .hdr{display:flex;justify-content:space-between;color:var(--muted);margin-bottom:2px}
+  #rig .tabs{display:flex;gap:4px;margin-bottom:6px}
+  #rig .tabs button{flex:1}
+  #rig .tabs button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  #rig .tabs button.on span{color:rgba(255,255,255,.75)}
+  #rig .tabs span{color:var(--muted);margin-left:3px}
+  #rig .mrow{display:grid;grid-template-columns:1fr 80px 30px;align-items:center;gap:6px;margin:3px 0}
+  #rig .mrow div{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #rig .mrow span{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
 </style></head>
 <body><div id="msg">Chargement…</div>
 <button id="rigBtn">Rig</button>
 <div id="rig">
-  <div class="hdr"><span>Os</span><span id="boneCount"></span></div>
+  <div class="tabs"><button id="tabBones">Os<span id="boneCount"></span></button><button id="tabMorphs">Blendshapes<span id="morphCount"></span></button></div>
+  <div id="paneBones">
   <input type="search" id="boneFilter" placeholder="Filtrer…">
   <select id="boneSel" size="8"></select>
   <div class="row"><b>X</b><input type="range" id="rx" min="-180" max="180" step="1" value="0"><span id="vx">0°</span></div>
@@ -32,6 +40,12 @@
   <div class="bar">
     <button id="resetBone">Reset os</button><button id="resetAll">Reset tout</button>
     <label><input type="checkbox" id="showSkel" checked>Squelette</label>
+  </div>
+  </div>
+  <div id="paneMorphs">
+    <input type="search" id="morphFilter" placeholder="Filtrer…">
+    <div id="morphList"></div>
+    <div class="bar"><button id="resetMorphs">Reset tout</button></div>
   </div>
 </div>
 <!--SCRIPTS-->
@@ -74,71 +88,113 @@
   }, (err) => { msg.textContent = 'Impossible de lire ce fichier : ' + (err && err.message || err); });
 
 
-  // ---- Rig : sliders de rotation par os ----
+  // ---- Rig : sliders de rotation par os + blendshapes (morph targets) ----
   let rigTick = null;
   function setupRig(root, size){
-    const bones = [];
-    root.traverse(o => { if (o.isBone) bones.push(o); });
-    if (!bones.length) return;
     const $ = id => document.getElementById(id);
-    const panel = $('rig'), sel = $('boneSel'), filter = $('boneFilter');
-    const sliders = ['x','y','z'].map(a => ({a, r: $('r'+a), v: $('v'+a)}));
-    $('rigBtn').style.display = 'block';
-    $('boneCount').textContent = bones.length;
-
-    const depth = b => { let d = 0, p = b.parent; while (p) { if (p.isBone) d++; p = p.parent; } return d; };
-    bones.forEach((b, i) => {
-      b.userData.rest = b.quaternion.clone();
-      b.userData.off = {x:0, y:0, z:0};
-      b.userData.label = '\u00a0\u00a0'.repeat(depth(b)) + (b.name || ('bone_' + i));
+    const bones = [];
+    const morphs = new Map(); // nom -> [{mesh, i}]
+    root.traverse(o => {
+      if (o.isBone) bones.push(o);
+      if (o.morphTargetDictionary && o.morphTargetInfluences)
+        for (const [name, i] of Object.entries(o.morphTargetDictionary)) {
+          if (!morphs.has(name)) morphs.set(name, []);
+          morphs.get(name).push({mesh: o, i});
+        }
     });
-
-    const helper = new THREE.SkeletonHelper(root);
-    helper.material.depthTest = false; helper.material.transparent = true; helper.renderOrder = 998;
-    helper.visible = false; scene.add(helper);
-    const marker = new THREE.Mesh(new THREE.SphereGeometry(size * 0.012, 12, 8),
-      new THREE.MeshBasicMaterial({color: 0x0a84ff, depthTest: false, transparent: true}));
-    marker.renderOrder = 999; marker.visible = false; scene.add(marker);
-
-    let current = null;
-    function fillList(){
-      const q = filter.value.trim().toLowerCase();
-      sel.innerHTML = '';
-      bones.forEach((b, i) => {
-        if (q && !(b.name || '').toLowerCase().includes(q)) return;
-        const o = document.createElement('option');
-        o.value = i; o.textContent = b.userData.label; sel.appendChild(o);
-      });
-      if (current) sel.value = bones.indexOf(current);
-    }
-    function select(b){
-      current = b;
-      sliders.forEach(s => { s.r.value = b.userData.off[s.a]; s.v.textContent = b.userData.off[s.a] + '°'; });
-    }
-    function apply(b){
-      const o = b.userData.off, d = THREE.MathUtils.DEG2RAD;
-      const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(o.x*d, o.y*d, o.z*d, 'XYZ'));
-      b.quaternion.copy(b.userData.rest).multiply(q);
-    }
-    filter.addEventListener('input', fillList);
-    sel.addEventListener('change', () => select(bones[+sel.value]));
-    sliders.forEach(s => s.r.addEventListener('input', () => {
-      if (!current) return;
-      current.userData.off[s.a] = +s.r.value; s.v.textContent = s.r.value + '°'; apply(current);
-    }));
-    $('resetBone').onclick = () => { if (!current) return; current.userData.off = {x:0,y:0,z:0}; apply(current); select(current); };
-    $('resetAll').onclick = () => { bones.forEach(b => { b.userData.off = {x:0,y:0,z:0}; apply(b); }); if (current) select(current); };
-    const skel = $('showSkel');
-    const syncVis = () => { const open = panel.classList.contains('open'); helper.visible = open && skel.checked; marker.visible = open && !!current; };
-    skel.onchange = syncVis;
-    $('rigBtn').onclick = () => { panel.classList.toggle('open'); controls.autoRotate = false; syncVis(); };
+    if (!bones.length && !morphs.size) return;
+    const panel = $('rig');
+    $('rigBtn').style.display = 'block';
     panel.addEventListener('pointerdown', () => { controls.autoRotate = false; });
 
-    fillList(); sel.selectedIndex = 0; select(bones[+sel.value]);
-    rigTick = () => {
-      marker.visible = panel.classList.contains('open') && !!current;
-      if (marker.visible) current.getWorldPosition(marker.position);
-    };
+    // Onglets
+    const tabs = {bones: [$('tabBones'), $('paneBones')], morphs: [$('tabMorphs'), $('paneMorphs')]};
+    const show = k => { for (const [n, [t, pane]] of Object.entries(tabs)) { t.classList.toggle('on', n === k); pane.style.display = n === k ? '' : 'none'; } syncVis(); };
+    tabs.bones[0].style.display = bones.length ? '' : 'none';
+    tabs.morphs[0].style.display = morphs.size ? '' : 'none';
+    if (!bones.length || !morphs.size) panel.querySelector('.tabs').style.display = 'none';
+    tabs.bones[0].onclick = () => show('bones');
+    tabs.morphs[0].onclick = () => show('morphs');
+    let helper = null, marker = null, current = null;
+    const bonesOn = () => panel.classList.contains('open') && tabs.bones[1].style.display !== 'none';
+    function syncVis(){
+      if (helper) helper.visible = bonesOn() && $('showSkel').checked;
+      if (marker) marker.visible = bonesOn() && !!current;
+    }
+    $('rigBtn').onclick = () => { panel.classList.toggle('open'); controls.autoRotate = false; syncVis(); };
+
+    // Os
+    if (bones.length) {
+      const sel = $('boneSel'), filter = $('boneFilter');
+      const sliders = ['x','y','z'].map(a => ({a, r: $('r'+a), v: $('v'+a)}));
+      $('boneCount').textContent = bones.length;
+      const depth = b => { let d = 0, p = b.parent; while (p) { if (p.isBone) d++; p = p.parent; } return d; };
+      bones.forEach((b, i) => {
+        b.userData.rest = b.quaternion.clone();
+        b.userData.off = {x:0, y:0, z:0};
+        b.userData.label = '  '.repeat(depth(b)) + (b.name || ('bone_' + i));
+      });
+      helper = new THREE.SkeletonHelper(root);
+      helper.material.depthTest = false; helper.material.transparent = true; helper.renderOrder = 998;
+      helper.visible = false; scene.add(helper);
+      marker = new THREE.Mesh(new THREE.SphereGeometry(size * 0.012, 12, 8),
+        new THREE.MeshBasicMaterial({color: 0x0a84ff, depthTest: false, transparent: true}));
+      marker.renderOrder = 999; marker.visible = false; scene.add(marker);
+
+      function fillList(){
+        const q = filter.value.trim().toLowerCase();
+        sel.innerHTML = '';
+        bones.forEach((b, i) => {
+          if (q && !(b.name || '').toLowerCase().includes(q)) return;
+          const o = document.createElement('option');
+          o.value = i; o.textContent = b.userData.label; sel.appendChild(o);
+        });
+        if (current) sel.value = bones.indexOf(current);
+      }
+      function select(b){
+        current = b;
+        sliders.forEach(s => { s.r.value = b.userData.off[s.a]; s.v.textContent = b.userData.off[s.a] + '°'; });
+      }
+      function apply(b){
+        const o = b.userData.off, d = THREE.MathUtils.DEG2RAD;
+        const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(o.x*d, o.y*d, o.z*d, 'XYZ'));
+        b.quaternion.copy(b.userData.rest).multiply(q);
+      }
+      filter.addEventListener('input', fillList);
+      sel.addEventListener('change', () => select(bones[+sel.value]));
+      sliders.forEach(s => s.r.addEventListener('input', () => {
+        if (!current) return;
+        current.userData.off[s.a] = +s.r.value; s.v.textContent = s.r.value + '°'; apply(current);
+      }));
+      $('resetBone').onclick = () => { if (!current) return; current.userData.off = {x:0,y:0,z:0}; apply(current); select(current); };
+      $('resetAll').onclick = () => { bones.forEach(b => { b.userData.off = {x:0,y:0,z:0}; apply(b); }); if (current) select(current); };
+      $('showSkel').onchange = syncVis;
+      fillList(); sel.selectedIndex = 0; select(bones[+sel.value]);
+      rigTick = () => { if (marker.visible) current.getWorldPosition(marker.position); };
+    }
+
+    // Blendshapes
+    if (morphs.size) {
+      $('morphCount').textContent = morphs.size;
+      const list = $('morphList'), rows = [];
+      for (const [name, targets] of morphs) {
+        const row = document.createElement('div'); row.className = 'mrow';
+        const label = document.createElement('div'); label.textContent = name; label.title = name;
+        const r = document.createElement('input'); r.type = 'range'; r.min = 0; r.max = 1; r.step = 0.01;
+        const v = document.createElement('span');
+        const set = x => { r.value = x; v.textContent = (+x).toFixed(2); targets.forEach(t => { t.mesh.morphTargetInfluences[t.i] = +x; }); };
+        set(targets[0].mesh.morphTargetInfluences[targets[0].i] || 0);
+        r.addEventListener('input', () => set(r.value));
+        row.append(label, r, v); list.appendChild(row);
+        rows.push({name: name.toLowerCase(), row, set});
+      }
+      $('morphFilter').addEventListener('input', e => {
+        const q = e.target.value.trim().toLowerCase();
+        rows.forEach(x => { x.row.style.display = !q || x.name.includes(q) ? '' : 'none'; });
+      });
+      $('resetMorphs').onclick = () => rows.forEach(x => x.set(0));
+    }
+    show(bones.length ? 'bones' : 'morphs');
   }
 
   addEventListener('resize', () => {
