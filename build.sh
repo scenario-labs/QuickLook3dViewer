@@ -15,13 +15,16 @@ cp App/Info.plist $A/Contents/Info.plist
 codesign -f -s - --entitlements Extension/Extension.entitlements $E
 codesign -f -s - --entitlements App/App.entitlements $A
 LSREG=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
-mkdir -p ~/Applications && rm -rf ~/Applications/GLBQuickLook.app && cp -R $A ~/Applications/
+# Update in place (rsync) instead of rm + cp: a delete event processed late by pkd unregisters the extension
+mkdir -p ~/Applications/GLBQuickLook.app && rsync -a --delete $A/ ~/Applications/GLBQuickLook.app/
 # Keep a single registered copy: a copy in out/ (same bundle id) makes pkd drop the extension
 $LSREG -u "$PWD/$A" 2>/dev/null || true; rm -rf out
 $LSREG -f ~/Applications/GLBQuickLook.app
 pluginkit -a ~/Applications/GLBQuickLook.app/Contents/PlugIns/GLBPreview.appex
 pluginkit -e use -i local.olivier.GLBQuickLook.GLBPreview
 qlmanage -r >/dev/null 2>&1; qlmanage -r cache >/dev/null 2>&1
+# Check after a delay: pkd can drop the extension a few seconds after registration
+sleep 5; pluginkit -m -i local.olivier.GLBQuickLook.GLBPreview | grep -q GLB || pluginkit -a ~/Applications/GLBQuickLook.app/Contents/PlugIns/GLBPreview.appex
 for i in 1 2 3 4 5; do pluginkit -m -i local.olivier.GLBQuickLook.GLBPreview | grep -q GLB && break; sleep 1; done
 pluginkit -m -i local.olivier.GLBQuickLook.GLBPreview | grep -q GLB || { echo "⚠️  Extension not registered by pluginkit" >&2; exit 1; }
 echo "Installed and registered: ~/Applications/GLBQuickLook.app"
