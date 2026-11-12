@@ -5,7 +5,7 @@ Quick Look extension to preview `.glb` / `.gltf` files in the Finder (Space bar)
 
 | Without GLB Quick Look | With GLB Quick Look |
 |---|---|
-| ![macOS can't preview .glb files](docs/before.png) | ![Interactive 3D preview with rig panel and animation clips](docs/after.png) |
+| ![macOS can't preview .glb files](docs/before.png) | ![Interactive 3D preview playing three animation clips in parallel](docs/after.png) |
 | macOS can't open `.glb` files in Quick Look. | Interactive 3D preview, plus a **Rig** panel to pose bones, drive blendshapes and play baked animation clips. |
 
 - `Extension/PreviewViewController.swift`: loads the file and injects it into a WKWebView
