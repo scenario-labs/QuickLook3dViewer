@@ -1,0 +1,224 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+  :root{--panel:rgba(255,255,255,.82);--fg:#222;--muted:#777;--line:rgba(0,0,0,.12);--accent:#0a84ff}
+  @media (prefers-color-scheme: dark){:root{--panel:rgba(40,42,46,.85);--fg:#eee;--muted:#999;--line:rgba(255,255,255,.14)}}
+  html,body{margin:0;height:100%;overflow:hidden;background:radial-gradient(circle at 50% 40%,#ffffff,#d9dce1);font:12px -apple-system,sans-serif;color:var(--fg)}
+  @media (prefers-color-scheme: dark){html,body{background:radial-gradient(circle at 50% 40%,#3a3d42,#1c1d20);}}
+  canvas{display:block;width:100%;height:100%;cursor:grab;image-rendering:pixelated}
+  canvas:active{cursor:grabbing}
+  #msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:14px;color:#888;pointer-events:none}
+  #hud{position:absolute;left:10px;bottom:10px;display:flex;gap:6px;flex-wrap:wrap;pointer-events:none}
+  #hud span{padding:3px 7px;border-radius:6px;background:var(--panel);border:1px solid var(--line);color:var(--muted);font-variant-numeric:tabular-nums;-webkit-backdrop-filter:blur(12px)}
+  #panelBtn{position:absolute;top:10px;right:10px;font:600 12px -apple-system,sans-serif;padding:5px 10px;border-radius:7px;border:1px solid var(--line);background:var(--panel);color:var(--fg);cursor:pointer;-webkit-backdrop-filter:blur(12px)}
+  #panel{position:absolute;top:44px;right:10px;width:250px;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel);-webkit-backdrop-filter:blur(12px);display:none}
+  #panel.open{display:block}
+  .row{margin:6px 0 10px}
+  .head{display:flex;justify-content:space-between;color:var(--muted);margin-bottom:2px}
+  .head output{font-variant-numeric:tabular-nums}
+  input[type=range]{width:100%;margin:0;accent-color:var(--accent)}
+  label.check{display:flex;gap:5px;align-items:center;color:var(--muted);margin:6px 0}
+  .small{color:var(--muted);margin:-6px 0 8px;font-size:11px}
+</style></head>
+<body>
+<canvas id="view"></canvas>
+<div id="msg">Loading…</div>
+<div id="hud"></div>
+<button id="panelBtn">Stack</button>
+<div id="panel">
+  <div class="row"><div class="head"><span>Rotation</span><output id="angleOut">30°</output></div><input type="range" id="angle" min="0" max="359" step="1" value="30"></div>
+  <label class="check"><input type="checkbox" id="auto" checked> Auto-rotate</label>
+  <div class="row"><div class="head"><span>Tilt</span><output id="tiltOut">0.60</output></div><input type="range" id="tilt" min="0.3" max="1" step="0.05" value="0.6"></div>
+  <div class="row"><div class="head"><span>Zoom</span><output id="zoomOut">×6</output></div><input type="range" id="zoom" min="1" max="20" step="1" value="6"></div>
+  <div class="row"><div class="head"><span>Layer spacing</span><output id="spacingOut">1.00 px</output></div><input type="range" id="spacing" min="0.5" max="6" step="0.25" value="1"></div>
+  <p class="small">Above 2 px the stack explodes and each slice becomes visible.</p>
+  <div class="row"><div class="head"><span>Highlight layer</span><output id="layerOut">off</output></div><input type="range" id="layer" min="-1" max="0" step="1" value="-1"></div>
+  <label class="check"><input type="checkbox" id="shadow" checked> Drop shadow</label>
+</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const msg = $('msg'), view = $('view'), vctx = view.getContext('2d');
+  const buf = document.createElement('canvas'), bctx = buf.getContext('2d');
+
+  // ---------- MagicaVoxel .vox -> one canvas per Z layer (bottom first), cropped, square footprint ----------
+  // Same algorithm as atelier-sprite-stacking (viewer.src.html).
+  function voxToSlices(buffer) {
+    const dv = new DataView(buffer), u8 = new Uint8Array(buffer);
+    const tag = o => String.fromCharCode(u8[o], u8[o + 1], u8[o + 2], u8[o + 3]);
+    if (buffer.byteLength < 8 || tag(0) !== 'VOX ') throw new Error('This is not a MagicaVoxel .vox file.');
+    let voxels = null, palette = null, models = 0;
+    (function walk(start, end) {
+      let p = start;
+      while (p + 12 <= end) {
+        const id = tag(p), n = dv.getInt32(p + 4, true), kids = dv.getInt32(p + 8, true), body = p + 12;
+        if (id === 'XYZI') {
+          models++;
+          if (!voxels) {
+            const count = dv.getInt32(body, true);
+            voxels = [];
+            for (let k = 0; k < count; k++) { const o = body + 4 + k * 4; voxels.push([u8[o], u8[o + 1], u8[o + 2], u8[o + 3]]); }
+          }
+        } else if (id === 'RGBA') {
+          palette = [];
+          for (let k = 0; k < 256; k++) palette.push([u8[body + k * 4], u8[body + k * 4 + 1], u8[body + k * 4 + 2]]);
+        }
+        if (kids) walk(body + n, body + n + kids);
+        p = body + n + kids;
+      }
+    })(8, buffer.byteLength);
+    if (!voxels || !voxels.length) throw new Error('No voxels found in this file.');
+    if (!palette) palette = Array.from({ length: 256 }, (_, i) => [i, i, i]);
+    let x0 = 1e9, x1 = -1, y0 = 1e9, y1 = -1, z0 = 1e9, z1 = -1;
+    for (const [x, y, z] of voxels) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+    const side = Math.max(x1 - x0, y1 - y0) + 3;
+    const ox = x0 - Math.floor((side - (x1 - x0 + 1)) / 2), oy = y0 - Math.floor((side - (y1 - y0 + 1)) / 2);
+    const layers = z1 - z0 + 1;
+    const imgs = Array.from({ length: layers }, () => new ImageData(side, side));
+    const colors = new Set();
+    for (const [x, y, z, i] of voxels) {
+      const c = palette[(i - 1 + 256) % 256], img = imgs[z - z0];
+      colors.add(i);
+      const k = ((side - 1 - (y - oy)) * side + (x - ox)) * 4;
+      img.data[k] = c[0]; img.data[k + 1] = c[1]; img.data[k + 2] = c[2]; img.data[k + 3] = 255;
+    }
+    const slices = imgs.map(img => {
+      const cv = document.createElement('canvas'); cv.width = side; cv.height = side;
+      cv.getContext('2d').putImageData(img, 0, 0); return cv;
+    });
+    return { slices, voxels: voxels.length, colors: colors.size, dims: [x1 - x0 + 1, y1 - y0 + 1, layers], models };
+  }
+
+  const state = { angle: 30, tilt: 0.6, zoom: 6, spacing: 1, shadow: true, auto: true, hover: -1, slices: null, silhouette: null, tinted: new Map() };
+
+  function tinted(i) {
+    if (state.tinted.has(i)) return state.tinted.get(i);
+    const src = state.slices[i], cv = document.createElement('canvas');
+    cv.width = src.width; cv.height = src.height;
+    const c = cv.getContext('2d'); c.drawImage(src, 0, 0);
+    c.globalCompositeOperation = 'source-atop'; c.globalAlpha = 0.65; c.fillStyle = '#0a84ff'; c.fillRect(0, 0, cv.width, cv.height);
+    state.tinted.set(i, cv); return cv;
+  }
+  function bufferSize(spacing) {
+    const s = state.slices, w = s[0].width, h = s[0].height;
+    const diag = Math.ceil(Math.hypot(w, h));
+    return { diag, bw: diag + 6, bh: Math.ceil(diag * state.tilt + (s.length - 1) * spacing) + 8 };
+  }
+  function fitZoom() {
+    const { bw, bh } = bufferSize(Math.max(1, state.spacing));
+    state.zoom = Math.max(1, Math.min(20, Math.floor(Math.min((innerWidth - 40) / bw, (innerHeight - 60) / bh))));
+    sync();
+  }
+
+  // ---------- rendering (same as atelier-sprite-stacking) ----------
+  function renderBuffer() {
+    const s = state.slices, w = s[0].width, h = s[0].height;
+    const { diag, bw, bh } = bufferSize(state.spacing);
+    if (buf.width !== bw || buf.height !== bh) { buf.width = bw; buf.height = bh; }
+    bctx.setTransform(1, 0, 0, 1, 0, 0);
+    bctx.clearRect(0, 0, bw, bh);
+    bctx.imageSmoothingEnabled = false;
+    const cx = Math.round(bw / 2), baseY = Math.round(bh - diag * state.tilt / 2 - 4);
+    const rad = state.angle * Math.PI / 180;
+    const place = (img, yOff, dx = 0) => {
+      bctx.setTransform(1, 0, 0, 1, cx + dx, Math.round(baseY - yOff));
+      bctx.scale(1, state.tilt); bctx.rotate(rad);
+      bctx.drawImage(img, -w / 2, -h / 2);
+    };
+    if (state.shadow) { bctx.globalAlpha = 0.22; place(state.silhouette, -2, 2); bctx.globalAlpha = 1; }
+    const fill = state.spacing > 1 && state.spacing <= 2 ? Math.ceil(state.spacing) : 1;
+    for (let i = 0; i < s.length; i++) {
+      bctx.globalAlpha = state.hover >= 0 && i > state.hover ? 0.12 : 1;
+      const img = i === state.hover ? tinted(i) : s[i];
+      for (let k = 0; k < fill; k++) place(img, i * state.spacing + k);
+    }
+    bctx.globalAlpha = 1;
+  }
+  function draw() {
+    const dpr = window.devicePixelRatio || 1;
+    const W = Math.round(innerWidth * dpr), H = Math.round(innerHeight * dpr);
+    if (view.width !== W || view.height !== H) { view.width = W; view.height = H; }
+    renderBuffer();
+    vctx.setTransform(1, 0, 0, 1, 0, 0);
+    vctx.clearRect(0, 0, W, H);
+    vctx.imageSmoothingEnabled = false;
+    const px = state.zoom * dpr, dw = buf.width * px, dh = buf.height * px;
+    vctx.drawImage(buf, Math.round((W - dw) / 2), Math.round((H - dh) / 2), dw, dh);
+  }
+
+  function sync() {
+    $('angle').value = Math.floor(state.angle); $('angleOut').value = Math.floor(state.angle) + '°';
+    $('tilt').value = state.tilt; $('tiltOut').value = state.tilt.toFixed(2);
+    $('zoom').value = state.zoom; $('zoomOut').value = '×' + state.zoom;
+    $('spacing').value = state.spacing; $('spacingOut').value = state.spacing.toFixed(2) + ' px';
+    $('layer').value = state.hover; $('layerOut').value = state.hover < 0 ? 'off' : (state.hover + 1) + ' / ' + state.slices.length;
+    $('auto').checked = state.auto; $('shadow').checked = state.shadow;
+    dirty = true;
+  }
+
+  let dirty = true, last = performance.now(), drag = null;
+  function loop(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (state.auto && !drag) { state.angle = (state.angle + dt * 40) % 360; $('angle').value = Math.floor(state.angle); $('angleOut').value = Math.floor(state.angle) + '°'; dirty = true; }
+    if (dirty) { draw(); dirty = false; }
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- load ----------
+  try {
+    const b64 = "__MODEL_B64__";
+    const bin = atob(b64), bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const m = voxToSlices(bytes.buffer);
+    state.slices = m.slices;
+    const w = m.slices[0].width, sil = document.createElement('canvas'); sil.width = w; sil.height = w;
+    const c = sil.getContext('2d'); m.slices.forEach(cv => c.drawImage(cv, 0, 0));
+    c.globalCompositeOperation = 'source-in'; c.fillStyle = '#000'; c.fillRect(0, 0, w, w);
+    state.silhouette = sil;
+    $('layer').max = m.slices.length - 1;
+    const hud = [`${m.dims.join('×')} voxels`, `${m.slices.length} layers`, `${m.voxels.toLocaleString('en-US')} voxels`, `${m.colors} colors`];
+    if (m.models > 1) hud.push(`model 1 of ${m.models}`);
+    $('hud').innerHTML = hud.map(t => `<span>${t}</span>`).join('');
+    msg.remove();
+    fitZoom();
+    requestAnimationFrame(loop);
+  } catch (err) {
+    msg.textContent = 'Unable to read this file: ' + (err && err.message || err);
+    $('panelBtn').style.display = 'none';
+    return;
+  }
+
+  // ---------- controls ----------
+  $('panelBtn').onclick = () => $('panel').classList.toggle('open');
+  $('angle').oninput = e => { state.angle = +e.target.value; state.auto = false; sync(); };
+  $('auto').onchange = e => { state.auto = e.target.checked; sync(); };
+  $('tilt').oninput = e => { state.tilt = +e.target.value; sync(); };
+  $('zoom').oninput = e => { state.zoom = +e.target.value; sync(); };
+  $('spacing').oninput = e => {
+    state.spacing = +e.target.value;
+    // Exploding the stack makes it taller: zoom out so it stays in view
+    const { bw, bh } = bufferSize(state.spacing);
+    while (state.zoom > 1 && (bh * state.zoom > innerHeight - 60 || bw * state.zoom > innerWidth - 40)) state.zoom--;
+    sync();
+  };
+  $('layer').oninput = e => { state.hover = +e.target.value; sync(); };
+  $('shadow').onchange = e => { state.shadow = e.target.checked; sync(); };
+  // Drag: horizontal rotates, vertical tilts. Wheel zooms. Double-click refits.
+  view.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, a: state.angle, t: state.tilt }; state.auto = false; view.setPointerCapture(e.pointerId); sync(); });
+  view.addEventListener('pointermove', e => {
+    if (!drag) return;
+    state.angle = ((drag.a + (e.clientX - drag.x) * 0.6) % 360 + 360) % 360;
+    state.tilt = Math.max(0.3, Math.min(1, drag.t - (e.clientY - drag.y) * 0.004));
+    sync();
+  });
+  view.addEventListener('pointerup', () => { drag = null; });
+  let wheelAcc = 0; // trackpads send many small deltas: step the integer zoom every ~60 px
+  view.addEventListener('wheel', e => {
+    e.preventDefault(); wheelAcc += e.deltaY;
+    if (Math.abs(wheelAcc) < 60) return;
+    state.zoom = Math.max(1, Math.min(20, state.zoom + (wheelAcc < 0 ? 1 : -1))); wheelAcc = 0; sync();
+  }, { passive: false });
+  view.addEventListener('dblclick', fitZoom);
+  addEventListener('resize', () => { dirty = true; });
+})();
+</script></body></html>

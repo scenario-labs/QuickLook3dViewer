@@ -13,7 +13,7 @@
 <key>NSExtension</key><dict>
   <key>NSExtensionAttributes</key><dict>
     <key>QLIsDataBasedPreview</key><false/>
-    <key>QLSupportedContentTypes</key><array><string>org.khronos.glb</string><string>org.khronos.gltf</string></array>
+    <key>QLSupportedContentTypes</key><array><string>org.khronos.glb</string><string>org.khronos.gltf</string><string>com.ephtracy.magicavoxel.vox</string></array>
     <key>QLSupportsSearchableItems</key><false/>
   </dict>
   <key>NSExtensionPointIdentifier</key><string>com.apple.quicklook.preview</string>

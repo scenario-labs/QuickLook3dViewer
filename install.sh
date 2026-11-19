@@ -52,4 +52,4 @@ i=0; while [ $i -lt 5 ] && ! registered; do sleep 1; i=$((i+1)); done
 registered || { echo "⚠️  Extension not registered. Open $DEST once, then check System Settings > General > Login Items & Extensions > Quick Look." >&2; exit 1; }
 
 echo "✅ Installed: $DEST"
-echo "   Select a .glb / .gltf file in the Finder and press Space."
+echo "   Select a .glb, .gltf or .vox file in the Finder and press Space."

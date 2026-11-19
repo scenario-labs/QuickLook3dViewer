@@ -25,7 +25,7 @@ universal $E/Contents/MacOS/GLBPreview -application-extension -module-name GLBPr
 universal $A/Contents/MacOS/GLBQuickLook -module-name GLBQuickLook -parse-as-library App/App.swift
 rm -rf out/obj
 
-cp Extension/viewer.html Extension/js/*.js $E/Contents/Resources/
+cp Extension/*.html Extension/js/*.js $E/Contents/Resources/
 sed -e 's/$(DEVELOPMENT_LANGUAGE)/en/; s/$(EXECUTABLE_NAME)/GLBPreview/; s/$(PRODUCT_BUNDLE_IDENTIFIER)/local.olivier.GLBQuickLook.GLBPreview/; s/$(PRODUCT_NAME)/GLBPreview/; s/$(PRODUCT_MODULE_NAME)/GLBPreview/' Extension/Info.plist > $E/Contents/Info.plist
 cp App/Info.plist $A/Contents/Info.plist
 if [[ -n "$VERSION" ]]; then

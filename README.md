@@ -1,6 +1,6 @@
 # GLB Quick Look
 
-Quick Look extension to preview `.glb` / `.gltf` files in the Finder (Space bar) and Spotlight.
+Quick Look extension to preview `.glb` / `.gltf` 3D models and MagicaVoxel `.vox` files in the Finder (Space bar) and Spotlight.
 3D rendering via three.js r147 (bundled in `Extension/js`, no network access).
 
 | Without GLB Quick Look | With GLB Quick Look |
@@ -13,7 +13,10 @@ Quick Look extension to preview `.glb` / `.gltf` files in the Finder (Space bar)
   - **Bones**: per-bone X/Y/Z rotation sliders, skeleton overlay
   - **Blendshapes**: morph target sliders (e.g. ARKit)
   - **Clips**: baked animation playback (play/pause, scrub, speed)
-- `App/`: minimal host app (required to embed the extension)
+- `Extension/vox.html`: `.vox` viewer in **sprite stacking**: the model is cut into one pixel-art slice per Z layer, then the slices are stacked and rotated (2D canvas, no WebGL).
+  Drag to rotate (horizontal) and tilt (vertical), scroll to zoom, double-click to refit. The **Stack** panel sets rotation, tilt, zoom, layer spacing (explode the stack), highlights a layer and toggles the drop shadow.
+  Only the first model of a multi-model `.vox` is shown.
+- `App/`: minimal host app (required to embed the extension; it also declares the `.vox` type, `com.ephtracy.magicavoxel.vox`)
 
 ## Install
 

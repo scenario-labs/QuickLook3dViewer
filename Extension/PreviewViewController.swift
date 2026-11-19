@@ -26,10 +26,12 @@ final class PreviewViewController: NSViewController, QLPreviewingController {
                 }
                 return try String(contentsOf: u, encoding: .utf8)
             }
-            let scripts = try ["three.min", "GLTFLoader", "OrbitControls", "RoomEnvironment"]
+            // .vox (MagicaVoxel) -> sprite stacking viewer (2D canvas); .glb/.gltf -> three.js viewer
+            let isVox = url.pathExtension.lowercased() == "vox"
+            let scripts = isVox ? "" : try ["three.min", "GLTFLoader", "OrbitControls", "RoomEnvironment"]
                 .map { "<script>\(try resource($0, "js"))</script>" }
                 .joined(separator: "\n")
-            var html = try resource("viewer", "html")
+            var html = try resource(isVox ? "vox" : "viewer", "html")
             html = html.replacingOccurrences(of: "__MODEL_B64__", with: data.base64EncodedString())
             html = html.replacingOccurrences(of: "<!--SCRIPTS-->", with: scripts)
             webView.loadHTMLString(html, baseURL: nil)

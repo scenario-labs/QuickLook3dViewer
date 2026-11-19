@@ -10,4 +10,10 @@
 <key>CFBundleVersion</key><string>1</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>NSPrincipalClass</key><string>NSApplication</string>
+<key>UTImportedTypeDeclarations</key><array><dict>
+  <key>UTTypeIdentifier</key><string>com.ephtracy.magicavoxel.vox</string>
+  <key>UTTypeDescription</key><string>MagicaVoxel model</string>
+  <key>UTTypeConformsTo</key><array><string>public.data</string><string>public.3d-content</string></array>
+  <key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>vox</string></array></dict>
+</dict></array>
 </dict></plist>
