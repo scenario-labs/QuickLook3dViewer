@@ -42,6 +42,9 @@ cleanup; trap - EXIT
 "$LSREG" -f "$DEST"
 pluginkit -a "$DEST/Contents/PlugIns/GLBPreview.appex"
 pluginkit -e use -i "$EXT_ID"
+# .vox files indexed before install keep a dynamic type (dyn.*) in Spotlight, so the Finder doesn't route
+# them to the extension: re-import them so they pick up com.ephtracy.magicavoxel.vox
+mdfind "kMDItemFSName == '*.vox'c" 2>/dev/null | while IFS= read -r f; do mdimport "$f" 2>/dev/null || true; done
 qlmanage -r >/dev/null 2>&1 || true; qlmanage -r cache >/dev/null 2>&1 || true
 
 # pkd can drop the extension a few seconds after registration: check again after a delay
