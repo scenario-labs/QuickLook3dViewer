@@ -56,6 +56,15 @@ final class PreviewViewController: NSViewController, QLPreviewingController {
                     "model.spz": (data, "application/octet-stream"),
                 ]
                 webView.load(URLRequest(url: URL(string: "\(PreviewSchemeHandler.scheme)://preview/index.html")!))
+            case "ipynb":
+                // Jupyter notebook: page, markdown lib and notebook served by the scheme handler (CSP blocks notebook scripts)
+                guard let marked = bundle.url(forResource: "marked.min", withExtension: "js") else { throw CocoaError(.fileNoSuchFile) }
+                schemeHandler.files = [
+                    "index.html": (Data(try resource("notebook", "html").utf8), "text/html"),
+                    "marked.min.js": (try Data(contentsOf: marked), "application/javascript"),
+                    "notebook.ipynb": (data, "application/json"),
+                ]
+                webView.load(URLRequest(url: URL(string: "\(PreviewSchemeHandler.scheme)://preview/index.html")!))
             case "vox":
                 // MagicaVoxel -> sprite stacking viewer (2D canvas)
                 let html = try resource("vox", "html").replacingOccurrences(of: "__MODEL_B64__", with: data.base64EncodedString())

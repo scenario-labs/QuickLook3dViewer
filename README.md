@@ -1,6 +1,6 @@
 # GLB Quick Look
 
-Quick Look extension to preview `.glb` / `.gltf` 3D models, MagicaVoxel `.vox` files and `.spz` Gaussian splats in the Finder (Space bar) and Spotlight.
+Quick Look extension to preview `.glb` / `.gltf` 3D models, MagicaVoxel `.vox` files, `.spz` Gaussian splats and Jupyter `.ipynb` notebooks in the Finder (Space bar) and Spotlight.
 3D rendering via three.js r147 (bundled in `Extension/js`, no network access).
 
 | Without GLB Quick Look | With GLB Quick Look |
@@ -20,7 +20,9 @@ Quick Look extension to preview `.glb` / `.gltf` 3D models, MagicaVoxel `.vox` f
   Scenes seen from inside (e.g. World Labs rooms) open in **Walk** mode at the capture viewpoint; objects open in **Orbit** mode. Y-down scenes are flipped automatically.
   Walk: drag to look around, scroll or WASD/QE to move. Orbit: drag to orbit, scroll to zoom. Right-drag or Shift-drag pans, double-click resets. The **Splat** panel switches mode, flips, and sets field of view and splat scale.
   Only the base color is rendered (higher-order spherical harmonics are ignored). The file is served to the page through a `glbql://` URL scheme handler instead of being inlined.
-- `App/`: minimal host app (required to embed the extension; it also declares the `.vox` and `.spz` types, `com.ephtracy.magicavoxel.vox` and `com.nianticlabs.spz`)
+- `Extension/notebook.html`: `.ipynb` viewer (nbformat 3 and 4): markdown cells (via the bundled [marked](https://github.com/markedjs/marked), MIT), code cells with syntax highlighting and `In [n]` prompts, and outputs: streams (ANSI colors, progress bars collapsed to their final state), images, HTML (pandas tables, in a sandboxed iframe), errors with colored tracebacks. Toggle code / outputs from the top bar.
+  A Content Security Policy blocks every script coming from the notebook, and HTML is sanitized. Not rendered: LaTeX math (shown as source), interactive widgets, remote images.
+- `App/`: minimal host app (required to embed the extension; it also declares the `.vox`, `.spz` and `.ipynb` types: `com.ephtracy.magicavoxel.vox`, `com.nianticlabs.spz`, `org.jupyter.ipynb`)
 
 ## Install
 
