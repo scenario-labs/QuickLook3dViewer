@@ -22,7 +22,17 @@ final class PreviewSchemeHandler: NSObject, WKURLSchemeHandler {
     func webView(_ webView: WKWebView, stop task: WKURLSchemeTask) {}
 }
 
-final class PreviewViewController: NSViewController, QLPreviewingController {
+/// Diagnostics: appended to Library/Caches/preview.log in the extension's sandbox container
+/// (~/Library/Containers/local.olivier.GLBQuickLook.GLBPreview/Data/Library/Caches/preview.log).
+func previewLog(_ message: String) {
+    guard let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else { return }
+    let url = dir.appendingPathComponent("preview.log")
+    let line = "\(ISO8601DateFormatter().string(from: Date())) \(message)\n"
+    if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(line.data(using: .utf8)!); try? h.close() }
+    else { try? line.data(using: .utf8)!.write(to: url) }
+}
+
+final class PreviewViewController: NSViewController, QLPreviewingController, WKNavigationDelegate, WKScriptMessageHandler {
     private var webView: WKWebView!
     private let schemeHandler = PreviewSchemeHandler()
 
@@ -31,14 +41,29 @@ final class PreviewViewController: NSViewController, QLPreviewingController {
     override func loadView() {
         let config = WKWebViewConfiguration()
         config.setURLSchemeHandler(schemeHandler, forURLScheme: PreviewSchemeHandler.scheme)
+        // Forward page errors to the log
+        config.userContentController.add(self, name: "log")
+        config.userContentController.addUserScript(WKUserScript(source: """
+            addEventListener('error', e => webkit.messageHandlers.log.postMessage('js error: ' + e.message + ' @' + (e.filename||'') + ':' + e.lineno));
+            addEventListener('unhandledrejection', e => webkit.messageHandlers.log.postMessage('js rejection: ' + (e.reason && e.reason.message || e.reason)));
+            """, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         webView = WKWebView(frame: NSRect(x: 0, y: 0, width: 800, height: 600), configuration: config)
+        webView.navigationDelegate = self
+        if #available(macOS 13.3, *) { webView.isInspectable = true }
         webView.autoresizingMask = [.width, .height]
         webView.setValue(false, forKey: "drawsBackground")
         view = webView
         preferredContentSize = NSSize(width: 800, height: 600)
     }
 
+    func userContentController(_ c: WKUserContentController, didReceive message: WKScriptMessage) { previewLog("\(message.body)") }
+    func webView(_ w: WKWebView, didFinish n: WKNavigation!) { previewLog("page loaded: \(w.url?.absoluteString ?? "html string")") }
+    func webView(_ w: WKWebView, didFail n: WKNavigation!, withError e: Error) { previewLog("navigation failed: \(e)") }
+    func webView(_ w: WKWebView, didFailProvisionalNavigation n: WKNavigation!, withError e: Error) { previewLog("provisional navigation failed: \(e)") }
+    func webViewWebContentProcessDidTerminate(_ w: WKWebView) { previewLog("web content process terminated") }
+
     func preparePreviewOfFile(at url: URL, completionHandler handler: @escaping (Error?) -> Void) {
+        previewLog("prepare \(url.lastPathComponent)")
         do {
             let data = try Data(contentsOf: url)
             let bundle = Bundle(for: PreviewViewController.self)
@@ -81,6 +106,7 @@ final class PreviewViewController: NSViewController, QLPreviewingController {
             }
             handler(nil)
         } catch {
+            previewLog("prepare failed: \(error)")
             handler(error)
         }
     }

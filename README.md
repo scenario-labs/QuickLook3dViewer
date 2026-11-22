@@ -34,6 +34,12 @@ Universal binary (Apple Silicon + Intel), macOS 13+.
 The app is ad-hoc signed, not notarized. If you download the zip from the Releases page with a browser instead, macOS will block it:
 unzip it, move it to `~/Applications`, then run `xattr -dr com.apple.quarantine ~/Applications/GLBQuickLook.app` and open it once.
 
+## Troubleshooting
+
+- **A file type still shows the generic preview after installing.** The Finder caches each file's type: run `killall Finder` once (and `qlmanage -r`).
+- **Diagnostics.** The extension logs each preview (file, page load, JavaScript errors) to
+  `~/Library/Containers/local.olivier.GLBQuickLook.GLBPreview/Data/Library/Caches/preview.log`. The web view is inspectable from Safari's Develop menu.
+
 ## Build from source
 
 Requires the Xcode Command Line Tools (`xcode-select --install`).
