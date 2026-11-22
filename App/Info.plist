@@ -15,5 +15,10 @@
   <key>UTTypeDescription</key><string>MagicaVoxel model</string>
   <key>UTTypeConformsTo</key><array><string>public.data</string><string>public.3d-content</string></array>
   <key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>vox</string></array></dict>
+</dict><dict>
+  <key>UTTypeIdentifier</key><string>com.nianticlabs.spz</string>
+  <key>UTTypeDescription</key><string>SPZ Gaussian splats</string>
+  <key>UTTypeConformsTo</key><array><string>public.data</string><string>public.3d-content</string></array>
+  <key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>spz</string></array></dict>
 </dict></array>
 </dict></plist>

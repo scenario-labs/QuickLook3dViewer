@@ -1,6 +1,6 @@
 # GLB Quick Look
 
-Quick Look extension to preview `.glb` / `.gltf` 3D models and MagicaVoxel `.vox` files in the Finder (Space bar) and Spotlight.
+Quick Look extension to preview `.glb` / `.gltf` 3D models, MagicaVoxel `.vox` files and `.spz` Gaussian splats in the Finder (Space bar) and Spotlight.
 3D rendering via three.js r147 (bundled in `Extension/js`, no network access).
 
 | Without GLB Quick Look | With GLB Quick Look |
@@ -16,7 +16,11 @@ Quick Look extension to preview `.glb` / `.gltf` 3D models and MagicaVoxel `.vox
 - `Extension/vox.html`: `.vox` viewer in **sprite stacking**: the model is cut into one pixel-art slice per Z layer, then the slices are stacked and rotated (2D canvas, no WebGL).
   Drag to rotate (horizontal) and tilt (vertical), scroll to zoom, double-click to refit. The **Stack** panel sets rotation, tilt, zoom, layer spacing (explode the stack), highlights a layer and toggles the drop shadow.
   Only the first model of a multi-model `.vox` is shown.
-- `App/`: minimal host app (required to embed the extension; it also declares the `.vox` type, `com.ephtracy.magicavoxel.vox`)
+- `Extension/splat.html`: `.spz` (Niantic SPZ v1–v3) **Gaussian splat** viewer, a small self-contained WebGL 2 renderer (projected 2D Gaussians, depth sort in a Web Worker, front-to-back compositing).
+  Scenes seen from inside (e.g. World Labs rooms) open in **Walk** mode at the capture viewpoint; objects open in **Orbit** mode. Y-down scenes are flipped automatically.
+  Walk: drag to look around, scroll or WASD/QE to move. Orbit: drag to orbit, scroll to zoom. Right-drag or Shift-drag pans, double-click resets. The **Splat** panel switches mode, flips, and sets field of view and splat scale.
+  Only the base color is rendered (higher-order spherical harmonics are ignored). The file is served to the page through a `glbql://` URL scheme handler instead of being inlined.
+- `App/`: minimal host app (required to embed the extension; it also declares the `.vox` and `.spz` types, `com.ephtracy.magicavoxel.vox` and `com.nianticlabs.spz`)
 
 ## Install
 

@@ -42,9 +42,9 @@ cleanup; trap - EXIT
 "$LSREG" -f "$DEST"
 pluginkit -a "$DEST/Contents/PlugIns/GLBPreview.appex"
 pluginkit -e use -i "$EXT_ID"
-# .vox files indexed before install keep a dynamic type (dyn.*) in Spotlight, so the Finder doesn't route
-# them to the extension: re-import them so they pick up com.ephtracy.magicavoxel.vox
-mdfind "kMDItemFSName == '*.vox'c" 2>/dev/null | while IFS= read -r f; do mdimport "$f" 2>/dev/null || true; done
+# .vox / .spz files indexed before install keep a dynamic type (dyn.*) in Spotlight, so the Finder doesn't route
+# them to the extension: re-import them so they pick up the types declared by the app
+mdfind "kMDItemFSName == '*.vox'c || kMDItemFSName == '*.spz'c" 2>/dev/null | while IFS= read -r f; do mdimport "$f" 2>/dev/null || true; done
 qlmanage -r >/dev/null 2>&1 || true; qlmanage -r cache >/dev/null 2>&1 || true
 
 # pkd can drop the extension a few seconds after registration: check again after a delay
@@ -55,4 +55,4 @@ i=0; while [ $i -lt 5 ] && ! registered; do sleep 1; i=$((i+1)); done
 registered || { echo "⚠️  Extension not registered. Open $DEST once, then check System Settings > General > Login Items & Extensions > Quick Look." >&2; exit 1; }
 
 echo "✅ Installed: $DEST"
-echo "   Select a .glb, .gltf or .vox file in the Finder and press Space."
+echo "   Select a .glb, .gltf, .vox or .spz file in the Finder and press Space."
