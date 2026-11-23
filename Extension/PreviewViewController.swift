@@ -95,13 +95,18 @@ final class PreviewViewController: NSViewController, QLPreviewingController, WKN
                 let html = try resource("vox", "html").replacingOccurrences(of: "__MODEL_B64__", with: data.base64EncodedString())
                 webView.loadHTMLString(html, baseURL: nil)
             default:
-                // .glb / .gltf -> three.js viewer
-                let scripts = try ["three.min", "GLTFLoader", "OrbitControls", "RoomEnvironment"]
+                // .glb / .gltf / .fbx / .blend -> three.js viewer
+                let format = ["fbx", "blend"].contains(url.pathExtension.lowercased()) ? url.pathExtension.lowercased() : "gltf"
+                let libs = ["three.min", "GLTFLoader", "OrbitControls", "RoomEnvironment"]
+                    + (format == "fbx" ? ["fflate.min", "NURBSUtils", "NURBSCurve", "FBXLoader"] : [])
+                    + (format == "blend" ? ["fzstd.min", "BlendLoader"] : [])
+                let scripts = try libs
                     .map { "<script>\(try resource($0, "js"))</script>" }
                     .joined(separator: "\n")
                 var html = try resource("viewer", "html")
                 html = html.replacingOccurrences(of: "__MODEL_B64__", with: data.base64EncodedString())
                 html = html.replacingOccurrences(of: "<!--SCRIPTS-->", with: scripts)
+                html = html.replacingOccurrences(of: "__FORMAT__", with: format)
                 webView.loadHTMLString(html, baseURL: nil)
             }
             handler(nil)

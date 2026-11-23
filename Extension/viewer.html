@@ -5,6 +5,8 @@
   @media (prefers-color-scheme: dark){html,body{background:radial-gradient(circle at 50% 40%,#3a3d42,#1c1d20);}}
   canvas{display:block}
   #msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:14px -apple-system,sans-serif;color:#888}
+  #info{position:absolute;left:10px;bottom:8px;font:11px -apple-system,sans-serif;color:#888;pointer-events:none}
+  #msg img{image-rendering:auto;border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,.25);margin-bottom:10px}
   :root{--panel:rgba(255,255,255,.82);--fg:#222;--muted:#777;--line:rgba(0,0,0,.12);--accent:#0a84ff}
   @media (prefers-color-scheme: dark){:root{--panel:rgba(40,42,46,.85);--fg:#eee;--muted:#999;--line:rgba(255,255,255,.14)}}
   #rigBtn{position:absolute;top:10px;right:10px;font:600 12px -apple-system,sans-serif;padding:5px 10px;border-radius:7px;border:1px solid var(--line);background:var(--panel);color:var(--fg);cursor:pointer;-webkit-backdrop-filter:blur(12px);display:none}
@@ -31,7 +33,7 @@
   #rig .mrow div{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   #rig .mrow span{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
 </style></head>
-<body><div id="msg">Loading…</div>
+<body><div id="msg">Loading…</div><div id="info"></div>
 <button id="rigBtn">Rig</button>
 <div id="rig">
   <div class="tabs"><button id="tabBones">Bones<span id="boneCount"></span></button><button id="tabMorphs">Blendshapes<span id="morphCount"></span></button><button id="tabClips">Clips<span id="clipCount"></span></button></div>
@@ -80,10 +82,42 @@
   const bin = atob(b64); const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
 
-  new THREE.GLTFLoader().parse(bytes.buffer, '', (gltf) => {
+  const FORMAT = "__FORMAT__";
+  function loadModel(buffer, onLoad, onError){
+    if (FORMAT === 'blend') return parseBlend(buffer).then(({group, info}) => {
+      const k = n => n >= 1e4 ? (n / 1e3).toFixed(0) + 'k' : n;
+      document.getElementById('info').textContent = `Blender ${String(info.version).replace(/^(\d)(\d+)$/, (m, a, b) => a + '.' + (+b))} · ${info.scene || ''} · ${info.objects} objects · ${k(info.verts)} vertices · ${k(info.faces)} faces · modifiers and external textures not applied`;
+      if (!group.children.length) {
+        if (!info.thumbnail) throw new Error('no mesh in this file');
+        const {w, h, rgba} = info.thumbnail, c = document.createElement('canvas'); c.width = w; c.height = h;
+        const img = new ImageData(w, h); for (let y = 0; y < h; y++) img.data.set(rgba.subarray((h - 1 - y) * w * 4, (h - y) * w * 4), y * w * 4);
+        c.getContext('2d').putImageData(img, 0, 0);
+        msg.innerHTML = `<div style="text-align:center"><img width="${w * 2}" src="${c.toDataURL()}"><br>No mesh in this file (saved preview shown)</div>`;
+        return;
+      }
+      onLoad(group, []);
+    }).catch(onError);
+    if (FORMAT !== 'fbx') return new THREE.GLTFLoader().parse(buffer, '', g => onLoad(g.scene, g.animations), onError);
+    try {
+      const g = new THREE.FBXLoader().parse(buffer, '');
+      // FBX gives Phong/Lambert materials, which ignore the environment map (the only light here): convert to PBR
+      const pbr = m => m.isMeshStandardMaterial ? m : new THREE.MeshStandardMaterial({
+        name: m.name, color: m.color, map: m.map, normalMap: m.normalMap, bumpMap: m.bumpMap, alphaMap: m.alphaMap,
+        emissive: m.emissive, emissiveMap: m.emissiveMap, aoMap: m.aoMap, vertexColors: m.vertexColors,
+        transparent: m.transparent, opacity: m.opacity, side: m.side, roughness: 0.7, metalness: 0 });
+      g.traverse(o => { if (o.isMesh) o.material = Array.isArray(o.material) ? o.material.map(pbr) : pbr(o.material); });
+      onLoad(g, g.animations);
+    } catch (e) { onError(e); }
+  }
+
+  loadModel(bytes.buffer, (root, animations) => {
     msg.remove();
-    const root = gltf.scene;
     scene.add(root);
+    if (FORMAT !== 'gltf') {
+      // untextured FBX / Blender materials look flat under the environment alone: add a key light
+      root.traverse(o => { if (o.isMesh) [].concat(o.material).forEach(m => { m.envMapIntensity = 0.25; }); });
+      const key = new THREE.DirectionalLight(0xffffff, 2.2); key.position.set(-1, 1.5, 1); camera.add(key); scene.add(camera);
+    }
     const box = new THREE.Box3().setFromObject(root);
     const size = box.getSize(new THREE.Vector3()).length() || 1;
     const center = box.getCenter(new THREE.Vector3());
@@ -92,7 +126,7 @@
     camera.position.set(0, size * 0.25, size * 1.1);
     controls.target.set(0, 0, 0);
     controls.update();
-    setupRig(root, size, gltf.animations || []);
+    setupRig(root, size, animations || []);
   }, (err) => { msg.textContent = 'Unable to read this file: ' + (err && err.message || err); });
 
 

@@ -25,5 +25,10 @@
   <key>UTTypeDescription</key><string>Jupyter notebook</string>
   <key>UTTypeConformsTo</key><array><string>public.json</string></array>
   <key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>ipynb</string></array></dict>
+</dict><dict>
+  <key>UTTypeIdentifier</key><string>org.blenderfoundation.blender.file</string>
+  <key>UTTypeDescription</key><string>Blender file</string>
+  <key>UTTypeConformsTo</key><array><string>public.data</string></array>
+  <key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>blend</string></array></dict>
 </dict></array>
 </dict></plist>

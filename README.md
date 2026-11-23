@@ -1,6 +1,6 @@
 # GLB Quick Look
 
-Quick Look extension to preview `.glb` / `.gltf` 3D models, MagicaVoxel `.vox` files, `.spz` Gaussian splats and Jupyter `.ipynb` notebooks in the Finder (Space bar) and Spotlight.
+Quick Look extension to preview `.glb` / `.gltf` / `.fbx` 3D models, Blender `.blend` scenes, MagicaVoxel `.vox` files, `.spz` Gaussian splats and Jupyter `.ipynb` notebooks in the Finder (Space bar) and Spotlight.
 3D rendering via three.js r147 (bundled in `Extension/js`, no network access).
 
 | Without GLB Quick Look | With GLB Quick Look |
@@ -9,7 +9,7 @@ Quick Look extension to preview `.glb` / `.gltf` 3D models, MagicaVoxel `.vox` f
 | macOS can't open `.glb` files in Quick Look. | Interactive 3D preview, plus a **Rig** panel to pose bones, drive blendshapes and play baked animation clips. |
 
 - `Extension/PreviewViewController.swift`: loads the file and injects it into a WKWebView
-- `Extension/viewer.html`: three.js viewer (auto-rotate, orbit, zoom) with a "Rig" panel:
+- `Extension/viewer.html`: three.js viewer for glTF and FBX (binary and ASCII, via the bundled three.js `FBXLoader` + fflate; textures embedded in the file are shown, external ones are not) (auto-rotate, orbit, zoom) with a "Rig" panel:
   - **Bones**: per-bone X/Y/Z rotation sliders, skeleton overlay
   - **Blendshapes**: morph target sliders (e.g. ARKit)
   - **Clips**: baked animation playback (play/pause, scrub, speed)
@@ -21,8 +21,9 @@ Quick Look extension to preview `.glb` / `.gltf` 3D models, MagicaVoxel `.vox` f
   Walk: drag to look around, scroll or WASD/QE to move. Orbit: drag to orbit, scroll to zoom. Right-drag or Shift-drag pans, double-click resets. The **Splat** panel switches mode, flips, and sets field of view and splat scale.
   Only the base color is rendered (higher-order spherical harmonics are ignored). The file is served to the page through a `glbql://` URL scheme handler instead of being inlined.
 - `Extension/notebook.html`: `.ipynb` viewer (nbformat 3 and 4): markdown cells (via the bundled [marked](https://github.com/markedjs/marked), MIT), code cells with syntax highlighting and `In [n]` prompts, and outputs: streams (ANSI colors, progress bars collapsed to their final state), images, HTML (pandas tables, in a sandboxed iframe), errors with colored tracebacks. Toggle code / outputs from the top bar.
+- `Extension/js/BlendLoader.js`: `.blend` reader written for this project (Blender 2.80 to 5.x, uncompressed, gzip or zstd via the bundled [fzstd](https://github.com/101arrowz/fzstd), MIT). It parses the SDNA struct catalogue stored in the file, then reads the meshes (legacy `MVert`/`MPoly`, 3.x–4.x generic attributes, 5.x attribute storage), object transforms and parents, the active scene's collections (excluded/hidden ones skipped, collection instances expanded) and material colors (Principled/Diffuse base color, packed image textures). Modifiers, curves, text and external textures are not evaluated. Shown in the three.js viewer.
   A Content Security Policy blocks every script coming from the notebook, and HTML is sanitized. Not rendered: LaTeX math (shown as source), interactive widgets, remote images.
-- `App/`: minimal host app (required to embed the extension; it also declares the `.vox`, `.spz` and `.ipynb` types: `com.ephtracy.magicavoxel.vox`, `com.nianticlabs.spz`, `org.jupyter.ipynb`)
+- `App/`: minimal host app (required to embed the extension; it also declares the `.vox`, `.spz` and `.ipynb` types: `com.ephtracy.magicavoxel.vox`, `com.nianticlabs.spz`, `org.jupyter.ipynb`, and `org.blenderfoundation.blender.file` for Macs without Blender)
 
 ## Install
 
