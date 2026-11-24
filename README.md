@@ -43,7 +43,7 @@ Not supported: Draco/meshopt-compressed glTF. `.usdz` is already previewed by ma
 
 ## Install
 
-    curl -fsSL https://raw.githubusercontent.com/VieVie31/GLBPreview/main/install.sh | sh
+    curl -fsSL https://raw.githubusercontent.com/scenario-labs/QuickLook3dViewer/main/install.sh | sh
 
 Downloads the latest release into `~/Applications` and registers the extension. Then select a supported file in the Finder and press Space.
 Universal binary (Apple Silicon + Intel), macOS 13+.

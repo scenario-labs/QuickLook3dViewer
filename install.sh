@@ -1,13 +1,13 @@
 #!/bin/sh
 # Installs GLB Quick Look to ~/Applications and registers the Quick Look extension.
-#   curl -fsSL https://raw.githubusercontent.com/VieVie31/GLBPreview/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/scenario-labs/QuickLook3dViewer/main/install.sh | sh
 #   sh install.sh --local dist/GLBQuickLook.zip     (install a locally built zip)
 #
 # Files downloaded with curl don't get the quarantine flag, so Gatekeeper doesn't block this
 # ad-hoc signed (non-notarized) build. The quarantine flag is also stripped explicitly below.
 set -e
 
-REPO="VieVie31/GLBPreview"
+REPO="scenario-labs/QuickLook3dViewer"
 URL="https://github.com/$REPO/releases/latest/download/GLBQuickLook.zip"
 DEST="$HOME/Applications/GLBQuickLook.app"
 EXT_ID="local.olivier.GLBQuickLook.GLBPreview"
